@@ -34,6 +34,9 @@
 
 #include "transport.h"
 
+// Import a timing library that we can use to time base our connection requests.
+#include <unistd.h>
+
 #define TAG FREERDP_TAG("core.nego")
 
 struct rdp_nego
@@ -94,6 +97,9 @@ static void nego_send(rdpNego* nego);
 static BOOL nego_process_negotiation_request(rdpNego* nego, wStream* s);
 static BOOL nego_process_negotiation_response(rdpNego* nego, wStream* s);
 static BOOL nego_process_negotiation_failure(rdpNego* nego, wStream* s);
+
+// Determine if we have already performed an auth request. If so we wait as some MFA clients don't allow rapid successive request.
+BOOL initial_auth_request = true;
 
 /**
  * Negotiate protocol security and connect.
@@ -453,6 +459,14 @@ static void nego_attempt_nla(rdpNego* nego)
 {
 	nego->RequestedProtocols = PROTOCOL_HYBRID | PROTOCOL_SSL;
 	WLog_DBG(TAG, "Attempting NLA security");
+
+	// Check if its our first time through this code, if so we just go on ahead otherwise we wait for a bit.
+	if (!initial_auth_request) {
+		WLog_INFO (TAG, "Sleeping for 10 Seconds to Allow for MFA Refresh...");
+		sleep (10);
+		WLog_INFO (TAG, "Sending next auth request.");
+	}
+	initial_auth_request = false;
 
 	if (!nego_transport_connect(nego))
 	{
